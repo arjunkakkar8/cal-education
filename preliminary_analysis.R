@@ -17,41 +17,62 @@ career <-
 #########################################
 ############# BROADBAND #################
 
-st_par <- function(sf_df, sf_func, n_cores, ...){
+st_par <- function(namespace, sf_func, sf_df, ...) {
+  # n_cores <- detectCores(logical = TRUE)
+  n_cores <- 12
+  cl <- makeCluster(n_cores)
+  clusterExport(cl, namespace)
   
   # Create a vector to split the data set up by.
-  split_vector <- rep(1:n_cores, each = nrow(sf_df) / n_cores, length.out = nrow(sf_df))
+  split_vector <-
+    rep(1:n_cores,
+        each = nrow(sf_df) / n_cores,
+        length.out = nrow(sf_df))
   
   # Perform GIS analysis
-  split_results <- split(sf_df, split_vector) %>%
-    mclapply(function(x) sf_func(x, ...), mc.cores = n_cores)
+  split_results <-
+    parLapply(cl, split(sf_df, split_vector), function(x)
+      sf_func(x, ...))
   
-  # Combine results back together. Method of combining depends on the output from the function.
-  if ( class(split_results[[1]]) == 'list' ){
-    result <- do.call("c", split_results)
-    names(result) <- NULL
-  } else {
-    result <- do.call("rbind", split_results)
-  }
+  stopCluster(cl)
   
-  # Return result
-  return(result)
+  return(do.call("rbind", split_results))
 }
 
 school_districts <-
-  st_read('California_School_District_Areas_2020-21')
+  st_read('data/California_School_District_Areas_2020-21')
 broadband <-
-  st_read('CA_Broadband_Dec2020_Public.gdb/', layer = "Fixed_Consumer_Deployment") %>%
+  st_read('data/CA_Broadband_Dec2020_Public.gdb', layer = "Fixed_Consumer_Deployment") %>%
   st_transform(st_crs(school_districts))
 
 intersections <- st_intersects(school_districts, broadband)
 
-intersection_pct <- st_par(school_districts, st_intersection, 8, broadband)
-  
-  st_intersection(school_districts, broadband) %>%
-  mutate(pct = st_area(.))
+intersection_pct <-
+  st_par(
+    list("st_intersection", "school_districts"),
+    st_intersection,
+    broadband[c("MaxAdDn", "MaxAdUp")],
+    school_districts["CDCode"]
+  ) %>%
+  mutate(area = st_area(.)) %>%
+  group_by(CDCode) %>%
+  summarize(
+    AvgDn = sum(area * MaxAdDn) / sum(area),
+    AvgUp = sum(area * MaxAdUp) / sum(area)
+  )
 
-#st_layers('California_School_District_Areas_2020-21/')
+broadband_average <- intersection_pct %>% st_drop_geometry()
+
+school_districts <- merge(school_districts, broadband_average, by = "CDCode")
+
+intersection_pct <-
+  st_intersection(broadband[c("MaxAdDn", "MaxAdUp")], school_districts["CDCode"]) %>%
+  mutate(area = st_area(.)) %>%
+  group_by(CDCode) %>%
+  summarize(
+    AvgDn = sum(area * MaxAdDn) / sum(area),
+    AvgUp = sum(area * MaxAdUp) / sum(area)
+  )
 
 #############
 
