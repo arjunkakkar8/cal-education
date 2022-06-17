@@ -15,6 +15,59 @@ career <-
 
 
 #########################################
+########## College Readiness ############
+enrollment <-
+  fread(
+    'https://dq.cde.ca.gov/dataquest/dlfile/dlfile.aspx?cLevel=School&cYear=2021-22&cCat=Enrollment&cPage=filesenr.asp'
+  )
+
+race_codes <- c(
+  "Unknown",
+  "AIAN",
+  "Asian",
+  "PI",
+  "Filipino",
+  "Latino",
+  "Black",
+  "White",
+  "None",
+  "Bi/Multiracial"
+)
+
+
+schools_labelled <- enrollment %>%
+  group_by(CDS_CODE, SCHOOL, ETHNIC) %>%
+  summarize(COUNT = sum(ENR_TOTAL)) %>%
+  mutate(PROP = COUNT / sum(COUNT),
+         MAJOR = ifelse(PROP > 0.5, ETHNIC, NA)) %>%
+  summarize(MAJOR = paste0(MAJOR[!is.na(MAJOR)], collapse = "")) %>%
+  mutate(MAJOR = ifelse(MAJOR == "", "Mixed", race_codes[as.numeric(MAJOR) + 1]))
+
+barplot(table(schools_labelled$MAJOR)/nrow(schools_labelled))
+
+
+
+enrollment %>%
+  group_by(CDS_CODE, SCHOOL, ETHNIC) %>%
+  summarize(COUNT = sum(ENR_TOTAL)) %>%
+  mutate(PROP = COUNT / sum(COUNT)) %>%
+  summarize(MAX_PROP = max(PROP)) %>%
+  ggplot(aes(MAX_PROP)) +
+  geom_histogram() +
+  theme_bw()
+
+
+enrollment %>%
+  group_by(CDS_CODE, SCHOOL, ETHNIC) %>%
+  summarize(COUNT = sum(ENR_TOTAL)) %>%
+  mutate(PROP = COUNT / sum(COUNT),
+         ETHNIC = race_codes[as.numeric(ETHNIC) + 1]) %>%
+  ggplot(aes(PROP)) +
+  geom_histogram() +
+  facet_wrap(vars(ETHNIC)) +
+  theme_bw()
+
+#########################################
 ############# BROADBAND #################
 
 st_par <- function(namespace, sf_func, sf_df, ...) {
@@ -63,7 +116,8 @@ intersection_pct <-
 
 broadband_average <- intersection_pct %>% st_drop_geometry()
 
-school_districts <- merge(school_districts, broadband_average, by = "CDCode")
+school_districts <-
+  merge(school_districts, broadband_average, by = "CDCode")
 
 intersection_pct <-
   st_intersection(broadband[c("MaxAdDn", "MaxAdUp")], school_districts["CDCode"]) %>%
