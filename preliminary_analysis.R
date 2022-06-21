@@ -13,6 +13,28 @@ graduation <-
 career <-
   fread('https://www3.cde.ca.gov/researchfiles/cadashboard/ccidownload2021.txt')
 
+#########################################
+########## Homelessness #################
+
+get_homeless_count = function(cds="00", level="state", year="2020-21") {
+  request_url = paste0("https://dq.cde.ca.gov/dataquest/DQCensus/AttChrAbsRate.aspx?cds=", cds,"&agglevel=", level, "&year=", year)
+  
+  read_html(request_url) %>%
+    html_form() %>%
+    first() %>%
+    html_form_set("ctl00$ContentPlaceHolder1$drpFilters" = "Hmls") %>%
+    html_form_submit() %>%
+    read_html() %>%
+    html_element("#ContentPlaceHolder1_grdAtt") %>%
+    html_table() %>%
+    select(1, 2) %>%
+    pivot_wider(names_from = 1, values_from = 2) %>%
+    return
+}
+
+get_homeless_count("19", "county")
+
+
 
 #########################################
 ########## College Readiness ############
