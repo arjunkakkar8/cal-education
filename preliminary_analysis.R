@@ -2,6 +2,7 @@ library(tidyverse)
 library(data.table)
 library(sf)
 library(parallel)
+library(rvest)
 
 
 census <-
@@ -16,8 +17,17 @@ career <-
 #########################################
 ########## Homelessness #################
 
-get_homeless_count = function(cds="00", level="state", year="2020-21") {
-  request_url = paste0("https://dq.cde.ca.gov/dataquest/DQCensus/AttChrAbsRate.aspx?cds=", cds,"&agglevel=", level, "&year=", year)
+get_homeless <- function(cds = "00",
+                         level = "state",
+                         year = "2020-21") {
+  request_url = paste0(
+    "https://dq.cde.ca.gov/dataquest/DQCensus/AttChrAbsRate.aspx?cds=",
+    cds,
+    "&agglevel=",
+    level,
+    "&year=",
+    year
+  )
   
   read_html(request_url) %>%
     html_form() %>%
@@ -29,10 +39,54 @@ get_homeless_count = function(cds="00", level="state", year="2020-21") {
     html_table() %>%
     select(1, 2) %>%
     pivot_wider(names_from = 1, values_from = 2) %>%
+    mutate_all(~ ifelse(. == "*", NA, as.numeric(gsub(',', '', .)))) %>%
+    mutate(cds = cds, year = year) %>%
     return
 }
 
-get_homeless_count("19", "county")
+get_homeless_by_county <- function(year = "2020-21", range = 1:58) {
+  lapply(range, function(i) {
+    get_homeless(sprintf("%02d", i), "county", year)
+  }) %>%
+    bind_rows() %>%
+    return
+}
+
+# homeless_counts_race_year <-
+#   lapply(c("2016-17", "2017-18", "2018-19", "2020-21"), function(year) {
+#     get_homeless_by_county(year)
+#   }) %>%
+#   bind_rows()
+# 
+# write.csv(homeless_counts_race_year,
+#           'data/homeless_counts_race_year.csv',
+#           row.names = FALSE)
+
+homeless_counts_race_year <- read.csv('data/homeless_counts_race_year.csv')
+
+
+homeless_counts_race_year %>%
+  mutate(total = rowSums(select(., 1:9), na.rm = TRUE),
+         latino_percentage =  Hispanic.or.Latino / total) %>%
+  View
+
+
+homeless_counts_race_year %>%
+  mutate(total = rowSums(select(., 1:9), na.rm = TRUE)) %>%
+  group_by(year) %>%
+  summarise(
+    latino = sum(Hispanic.or.Latino, na.rm = TRUE),
+    total = sum(total, na.rm = TRUE)
+  ) %>%
+  mutate(percentage = latino * 100 / total)
+
+homeless_counts_race_year%>%
+  mutate(total = rowSums(select(., 1:9), na.rm = TRUE)) %>% 
+  filter(year == "2020-21") %>%
+  mutate(percentage = Hispanic.or.Latino * 100 / total) %>% View
+
+
+
 
 
 
@@ -65,7 +119,7 @@ schools_labelled <- enrollment %>%
   summarize(MAJOR = paste0(MAJOR[!is.na(MAJOR)], collapse = "")) %>%
   mutate(MAJOR = ifelse(MAJOR == "", "Mixed", race_codes[as.numeric(MAJOR) + 1]))
 
-barplot(table(schools_labelled$MAJOR)/nrow(schools_labelled))
+barplot(table(schools_labelled$MAJOR) / nrow(schools_labelled))
 
 
 
@@ -209,6 +263,22 @@ enrollment_17_21 <- bind_rows(
       )
     )
   )
+
+# Enrollment over time by grade
+enrollment_17_21 %>%
+  pivot_longer(cols = KDGN:UNGR_SEC, names_to = "GRADE", values_to = "COUNT") %>%
+  group_by(YEAR, GRADE) %>%
+  summarize(COUNT = sum(COUNT), .groups = "drop") %>%
+  filter(!GRADE %in% c('UNGR_ELM', 'UNGR_SEC')) %>% View
+  ggplot(aes(
+    x = YEAR,
+    y = COUNT,
+    color = GRADE,
+    group = GRADE
+  )) +
+  geom_point() +
+  geom_line() +
+  theme_bw()
 
 # Enrollment over time by Race
 enrollment_17_21 %>%
