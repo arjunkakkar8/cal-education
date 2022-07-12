@@ -39,7 +39,7 @@ get_homeless <- function(cds = "00",
     html_table() %>%
     select(1, 2) %>%
     pivot_wider(names_from = 1, values_from = 2) %>%
-    mutate_all(~ ifelse(. == "*", NA, as.numeric(gsub(',', '', .)))) %>%
+    mutate_all( ~ ifelse(. == "*", NA, as.numeric(gsub(',', '', .)))) %>%
     mutate(cds = cds, year = year) %>%
     return
 }
@@ -57,12 +57,29 @@ get_homeless_by_county <- function(year = "2020-21", range = 1:58) {
 #     get_homeless_by_county(year)
 #   }) %>%
 #   bind_rows()
-# 
+#
 # write.csv(homeless_counts_race_year,
 #           'data/homeless_counts_race_year.csv',
 #           row.names = FALSE)
 
-homeless_counts_race_year <- read.csv('data/homeless_counts_race_year.csv')
+homeless_counts_race_year_raw <- read.csv('data/homeless_counts_race_year.csv')
+
+homeless_counts_race_year <-
+  read.csv('data/homeless_counts_race_year.csv') %>%
+  rename(
+    Black = African.American,
+    AIAN = American.Indian.or.Alaska.Native,
+    Latino = Hispanic.or.Latino,
+    Other = Not.Reported,
+    `Two or More` = Two.or.More.Races
+  ) %>%
+  rowwise() %>%
+  mutate(
+    AAPI = sum(Asian, Filipino, Pacific.Islander, na.rm = TRUE),
+    .keep = "unused",
+    .after = "AIAN"
+  ) %>%
+  mutate(AAPI = ifelse(AAPI == 0, NA, AAPI))
 
 
 homeless_counts_race_year %>%
@@ -80,8 +97,8 @@ homeless_counts_race_year %>%
   ) %>%
   mutate(percentage = latino * 100 / total)
 
-homeless_counts_race_year%>%
-  mutate(total = rowSums(select(., 1:9), na.rm = TRUE)) %>% 
+homeless_counts_race_year %>%
+  mutate(total = rowSums(select(., 1:9), na.rm = TRUE)) %>%
   filter(year == "2020-21") %>%
   mutate(percentage = Hispanic.or.Latino * 100 / total) %>% View
 
@@ -266,16 +283,18 @@ enrollment_17_21 <- bind_rows(
 
 # Enrollment over time by grade
 enrollment_17_21 %>%
-  pivot_longer(cols = KDGN:UNGR_SEC, names_to = "GRADE", values_to = "COUNT") %>%
+  pivot_longer(cols = KDGN:UNGR_SEC,
+               names_to = "GRADE",
+               values_to = "COUNT") %>%
   group_by(YEAR, GRADE) %>%
   summarize(COUNT = sum(COUNT), .groups = "drop") %>%
   filter(!GRADE %in% c('UNGR_ELM', 'UNGR_SEC')) %>% View
-  ggplot(aes(
-    x = YEAR,
-    y = COUNT,
-    color = GRADE,
-    group = GRADE
-  )) +
+ggplot(aes(
+  x = YEAR,
+  y = COUNT,
+  color = GRADE,
+  group = GRADE
+)) +
   geom_point() +
   geom_line() +
   theme_bw()

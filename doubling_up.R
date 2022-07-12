@@ -1,36 +1,31 @@
 # First, we install the necessary library packages. library(ipumsr) is also helpful, though not necessary.
 library(srvyr)
-library(dplyr)
 library(tidyverse)
 library(robsurvey)
 
 # Second, we read in the data downloaded from IPUMS and check that the variables and number of observations are as expected.
-data1 <-
-  read.csv("data/acs_cal_doubling_raw.csv",  blank.lines.skip = TRUE)
-  
-names(data1) #names of variables
-length(data1$YEAR) #number of observations
-
-
 # Next, we unite the STATEFIP with PUMA to create unique IDs (this is more important when we have more than one state in the sample or we are planning to join with other data sets).
-data1$STATEFIP <- as.character(data1$STATEFIP)
-data1$PUMA <- as.character(data1$PUMA)
-data0 <-
-  data1 %>% unite("GEOID", c(STATEFIP, PUMA), remove = FALSE, sep = "")
+raw <-
+  read.csv("data/acs_cal_doubling_raw_5y.csv",  blank.lines.skip = TRUE) %>%
+  mutate(STATEFIP = as.character(STATEFIP),
+         PUMA = as.character(PUMA)) %>%
+  unite("GEOID", c(STATEFIP, PUMA), remove = FALSE, sep = "")
+
+names(raw) #names of variables
+nrow(raw) #number of observations
 
 
-# Next, we use the robsurvey pacakge to apply the household weights to the variables. This is to create the median rent index to adjust the poverty variables. You will see the message "summarise()` ungrouping output (override with `.groups` argument)" which can be ignored. Next, join the original dataset with the area_data frame that only has GEOID and the area median gross rent.
-area_data <- data0 %>%
+# Next, we use the robsurvey pacakge to apply the household weights to the variables. This is to create the median rent index to adjust the poverty variables. You will see the message "summarise()` ungrouping output (override with `.groups` argument)" which can be ignored.
+area_data <- raw %>%
   dplyr::filter(OWNERSHP == 2, BEDROOMS == 3, KITCHEN == 4, PLUMBING == 20, PERNUM == 1) %>%
   group_by(GEOID) %>%
   summarise(AMGR = weighted_median(RENTGRS, HHWT))
 
-data2 <- left_join(data0, area_data,  by = "GEOID")
-
-
+# Next, join the original dataset with the area_data frame that only has GEOID and the area median gross rent.
 # Next, we construct new variables needed for the doubling up measure. In this sample code, 1086 represents the national median gross rent for 2019 for a 2 bedroom, but this should be updated for future or past years (Use Census TableID: B25031)
-data3 <-
-  data2 %>% mutate(
+computed <-
+  left_join(raw, area_data,  by = "GEOID") %>%
+  mutate(
     adjustment = ifelse(
       OWNERSHP == 1 & MORTGAGE == 1,
       .402 * (AMGR / 1086) + .598,
@@ -97,7 +92,8 @@ data3 <-
     ),
     
     DUsingadcrowd = ifelse(RELATE %in% c(3, 4) &
-                             SFTYPE == 0 & AGE > 17 & overcrowded == 1, 1, 0),
+                             SFTYPE == 0 &
+                             AGE > 17 & overcrowded == 1, 1, 0),
     
     DUnonrelative = ifelse(RELATED == 1260, 1, 0),
     
@@ -146,10 +142,28 @@ data3 <-
   )
 
 
-# Finally, we enter the survey design information to compute weighted frequencies and
-# standard errors using ACS person weights (PERWT) and Replicate Weights (REPWTP).
+
+
+
 person_weighted <-
-  data3 %>% as_survey_design(
+  computed %>%
+  # Add computed race variable that creates expected categories
+  mutate(
+    RACE_COMB = case_when(
+      HISPAN != 0 ~ "Latino",
+      RACE == 1 ~ "White",
+      RACE == 2 ~ "Black",
+      RACE == 3 ~ "AIAN",
+      RACE == 4 | RACE == 5 | RACE == 6 ~ "AAPI",
+      RACE == 8 | RACE == 9 ~ "Two or More",
+      RACE == 7 ~ "Other",
+      TRUE ~ "Other"
+    ),
+    STUDENT_AGED = ifelse(AGE <= 17 & AGE >= 5, 1, 0)
+  ) %>%
+  # Finally, we enter the survey design information to compute weighted frequencies and
+  # standard errors using ACS person weights (PERWT) and Replicate Weights (REPWTP).
+  as_survey_design(
     weights = PERWT,
     repweights = matches("REPWTP[0-9]+"),
     type = "JK1",
@@ -158,12 +172,53 @@ person_weighted <-
     mse = TRUE
   )
 
-out <- person_weighted %>%
-  group_by(YEAR, AGE) %>%
-  summarise(per10k = 10000 * survey_mean(doubledup),
-            total = survey_total(doubledup)) %>% 
-  select(YEAR, AGE, per10k)
+person_weighted %>%
+  group_by(YEAR, COUNTYFIP, RACE_COMB, STUDENT_AGED) %>%
+  summarise(total = sum(doubledup * PERWT)) %>%
+  pivot_wider(names_from = STUDENT_AGED,
+              values_from = total,
+              names_prefix = "STUDENT_") %>%
+  mutate(MULT = STUDENT_0 / STUDENT_1)
 
-ggplot(out, aes(x = AGE, y = per10k, group = YEAR, fill = YEAR)) +
-  geom_bar(stat="identity", position=position_dodge()) + 
+
+
+person_weighted %>%
+  group_by(YEAR, COUNTYFIP, RACE_COMB) %>%
+  summarise(total = survey_ratio(doubledup, (STUDENT_AGED == 1) * doubledup)) %>% View
+
+person_weighted %>%
+  group_by(YEAR, RACE_COMB) %>%
+  summarise(total = survey_ratio(doubledup, (STUDENT_AGED == 1) * doubledup)) %>% View
+
+
+person_weighted %>%
+  filter(AGE <= 17 & AGE >= 5) %>%
+  group_by(YEAR, RACE_COMB) %>%
+  summarise(total = sum(doubledup * PERWT)) %>%
+  mutate(prop = total / sum(total)) %>%
+  select(-total) %>%
+  pivot_wider(names_from = RACE_COMB, values_from = prop)
+
+person_weighted %>%
+  filter(AGE > 17 | AGE < 5) %>%
+  group_by(YEAR, RACE_COMB) %>%
+  summarise(total = sum(doubledup * PERWT)) %>%
+  mutate(prop = total / sum(total)) %>%
+  select(-total) %>%
+  pivot_wider(names_from = RACE_COMB, values_from = prop) %>% View
+
+person_weighted %>%
+  filter(AGE <= 17 & AGE >= 5) %>%
+  group_by(YEAR, RACE_COMB) %>%
+  summarise(per10k = 10000 * survey_mean(doubledup),
+            total = survey_total(doubledup)) %>% View
+
+
+ggplot(out, aes(
+  x = AGE,
+  y = total,
+  group = YEAR,
+  fill = YEAR
+)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
   theme_bw()
