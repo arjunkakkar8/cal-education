@@ -1,9 +1,9 @@
-# First, we install the necessary library packages. library(ipumsr) is also helpful, though not necessary.
 library(srvyr)
 library(tidyverse)
 library(robsurvey)
+library(acs)
 
-# Second, we read in the data downloaded from IPUMS and check that the variables and number of observations are as expected.
+# Read in the data downloaded from IPUMS and check that the variables and number of observations are as expected.
 # Next, we unite the STATEFIP with PUMA to create unique IDs (this is more important when we have more than one state in the sample or we are planning to join with other data sets).
 raw <-
   read.csv("data/acs_cal_doubling_raw_5y.csv",  blank.lines.skip = TRUE) %>%
@@ -142,9 +142,6 @@ computed <-
   )
 
 
-
-
-
 person_weighted <-
   computed %>%
   # Add computed race variable that creates expected categories
@@ -173,52 +170,19 @@ person_weighted <-
   )
 
 person_weighted %>%
-  group_by(YEAR, COUNTYFIP, RACE_COMB, STUDENT_AGED) %>%
-  summarise(total = sum(doubledup * PERWT)) %>%
-  pivot_wider(names_from = STUDENT_AGED,
-              values_from = total,
-              names_prefix = "STUDENT_") %>%
-  mutate(MULT = STUDENT_0 / STUDENT_1)
-
-
-
-person_weighted %>%
   group_by(YEAR, COUNTYFIP, RACE_COMB) %>%
-  summarise(total = survey_ratio(doubledup, (STUDENT_AGED == 1) * doubledup)) %>% View
+  summarise(COUNT = survey_total(doubledup)) %>%
+  ungroup() %>%
+  select(-YEAR) %>%
+  filter(COUNTYFIP != 0) %>% merge(geo.lookup("CA", .$COUNTYFIP),
+                                   by.x = "COUNTYFIP",
+                                   by.y = "county") %>%
+  mutate(county = gsub(" County", "", county.name)) %>%
+  select(-state, -state.name,-county.name,-COUNTYFIP) %>%
+  filter(COUNT != 0) %>%
+  write.csv('data/doubled_up_race_2019.csv', row.names = FALSE)
 
 person_weighted %>%
   group_by(YEAR, RACE_COMB) %>%
-  summarise(total = survey_ratio(doubledup, (STUDENT_AGED == 1) * doubledup)) %>% View
-
-
-person_weighted %>%
-  filter(AGE <= 17 & AGE >= 5) %>%
-  group_by(YEAR, RACE_COMB) %>%
-  summarise(total = sum(doubledup * PERWT)) %>%
-  mutate(prop = total / sum(total)) %>%
-  select(-total) %>%
-  pivot_wider(names_from = RACE_COMB, values_from = prop)
-
-person_weighted %>%
-  filter(AGE > 17 | AGE < 5) %>%
-  group_by(YEAR, RACE_COMB) %>%
-  summarise(total = sum(doubledup * PERWT)) %>%
-  mutate(prop = total / sum(total)) %>%
-  select(-total) %>%
-  pivot_wider(names_from = RACE_COMB, values_from = prop) %>% View
-
-person_weighted %>%
-  filter(AGE <= 17 & AGE >= 5) %>%
-  group_by(YEAR, RACE_COMB) %>%
-  summarise(per10k = 10000 * survey_mean(doubledup),
-            total = survey_total(doubledup)) %>% View
-
-
-ggplot(out, aes(
-  x = AGE,
-  y = total,
-  group = YEAR,
-  fill = YEAR
-)) +
-  geom_bar(stat = "identity", position = position_dodge()) +
-  theme_bw()
+  summarise(MULT = survey_ratio(doubledup, (STUDENT_AGED == 1) * doubledup)) %>%
+  write.csv('data/homeless_multipliers_race_2019.csv', row.names = FALSE)
