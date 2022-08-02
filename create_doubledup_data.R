@@ -169,6 +169,14 @@ person_weighted <-
     mse = TRUE
   )
 
+
+totals <- person_weighted %>%
+  group_by(YEAR, RACE_COMB) %>%
+  summarise(COUNT = survey_total(doubledup)) %>%
+  ungroup() %>%
+  select(-YEAR) %>% 
+  mutate(county = "California")
+
 person_weighted %>%
   group_by(YEAR, COUNTYFIP, RACE_COMB) %>%
   summarise(COUNT = survey_total(doubledup)) %>%
@@ -180,6 +188,7 @@ person_weighted %>%
   mutate(county = gsub(" County", "", county.name)) %>%
   select(-state, -state.name,-county.name,-COUNTYFIP) %>%
   filter(COUNT != 0) %>%
+  bind_rows(totals) %>%
   write.csv('data/doubled_up_race_2019.csv', row.names = FALSE)
 
 person_weighted %>%

@@ -49,8 +49,13 @@ get_homeless_by_county <- function(year = "2020-21", range = 1:58) {
     return
 }
 
+totals <- get_homeless(year = "2018-19") %>%
+  select(-year) %>%
+  mutate(county = "California")
+
 get_homeless_by_county("2018-19") %>%
   select(-year) %>%
+  bind_rows(totals) %>%
   write.csv('data/homeless_counts_race_2019.csv',
             row.names = FALSE)
 
