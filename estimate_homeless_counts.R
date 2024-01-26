@@ -97,17 +97,17 @@ estimated_homeless <-
     rename(doubledup = COUNT, doubledup_se = COUNT_se) %>%
     group_by(county) %>%
     # Calculate the proportion of doubled up by race for each county
-    mutate(doubledup_prop = doubledup / sum(doubledup, na.rm = TRUE)) %>%
-    select(-ends_with("_se"))
+    mutate(doubledup_prop = doubledup / sum(doubledup, na.rm = TRUE))
 
-
-write.csv(estimated_homeless,
-    "data/processed/homeless_estimates.csv",
-    row.names = FALSE
-)
+estimated_homeless %>%
+    select(-ends_with("_se")) %>%
+    write.csv(
+        "data/processed/homeless_estimates.csv",
+        row.names = FALSE
+    )
 
 sheet_write(
     estimated_homeless,
     "1Hbn66qNCI4ejuDiHv55n0EN2NQffbIEK8NPe1VhjJ-w",
-    "Estimated Homeless 2021",
+    sheet = "Estimated Homeless 2021"
 )
