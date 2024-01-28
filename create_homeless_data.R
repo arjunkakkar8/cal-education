@@ -44,6 +44,44 @@ get_homeless_by_county <- function(year = "2022-23", range = 1:58) {
         return()
 }
 
+get_homeless_dwellings <- function(cds = "00",
+                                   level = "state",
+                                   year = "2022-23") {
+    request_url <- paste0(
+        "https://dq.cde.ca.gov/dataquest/DQCensus/HmlsEnrByDT.aspx?cds=",
+        cds,
+        "&agglevel=",
+        level,
+        "&year=",
+        year
+    )
+
+    extract <- read_html(request_url)
+
+    name_table <- extract %>%
+        html_element("#ContentPlaceHolder1_grdHmlsEnrByDTTotals") %>%
+        html_table()
+
+    extract %>%
+        html_element("#ContentPlaceHolder1_grdHmlsEnrByDT") %>%
+        html_table() %>%
+        select(1, 4:8) %>%
+        mutate(
+            county = name_table[[1]][1],
+            cds = cds,
+            year = year
+        ) %>%
+        return()
+}
+
+get_homeless_dwellings_by_county <- function(year = "2022-23", range = 1:58) {
+    lapply(range, function(i) {
+        get_homeless_dwellings(sprintf("%02d", i), "county", year)
+    }) %>%
+        bind_rows() %>%
+        return()
+}
+
 totals <- get_homeless(year = "2022-23") %>%
     select(-year) %>%
     mutate(county = "California")
@@ -52,6 +90,17 @@ get_homeless_by_county("2022-23") %>%
     select(-year) %>%
     bind_rows(totals) %>%
     write.csv("data/intermediate/homeless_counts_race_2022.csv",
+        row.names = FALSE
+    )
+
+dwelling_totals <- get_homeless_dwellings(year = "2022-23") %>%
+    select(-year) %>%
+    mutate(county = "California")
+
+get_homeless_dwellings_by_county("2022-23") %>%
+    select(-year) %>%
+    bind_rows(dwelling_totals) %>%
+    write.csv("data/intermediate/homeless_share_dwellings_race_2022.csv",
         row.names = FALSE
     )
 
