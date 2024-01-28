@@ -39,7 +39,7 @@ doubledup_estimates_race <-
 
 total_counts_race <-
     read.csv("data/raw/total_counts_race_2021.csv") %>%
-    rename(
+    select(
         county = 1,
         White = 3,
         Black = 4,
@@ -51,10 +51,10 @@ total_counts_race <-
         Latino = 10,
     ) %>%
     mutate(county = gsub(" County, California", "", county)) %>%
-    mutate(across(2:10, ~ as.numeric(gsub(",", "", .)))) %>%
+    mutate(across(2:9, ~ as.numeric(gsub(",", "", .)))) %>%
     mutate(AAPI = Asian + PI, .keep = "unused") %>%
     relocate(county) %>%
-    pivot_longer(2:9, names_to = "race", values_to = "total")
+    pivot_longer(2:8, names_to = "race", values_to = "total")
 
 
 estimated_homeless <-
