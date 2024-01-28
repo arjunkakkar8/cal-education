@@ -11,7 +11,7 @@ library(googlesheets4)
 
 
 homeless_counts_race <-
-    read.csv("data/intermediate/homeless_counts_race_2019.csv") %>%
+    read.csv("data/intermediate/homeless_counts_race_2022.csv") %>%
     rename(
         Black = African.American,
         AIAN = American.Indian.or.Alaska.Native,
@@ -38,27 +38,23 @@ doubledup_estimates_race <-
     read.csv("data/intermediate/doubled_up_race_2021.csv")
 
 total_counts_race <-
-    read.csv("data/intermediate/total_counts_race_2019.csv") %>%
+    read.csv("data/raw/total_counts_race_2021.csv") %>%
     rename(
-        measure = 1,
-        Latino = 2,
+        county = 1,
         White = 3,
         Black = 4,
         AIAN = 5,
         Asian = 6,
         PI = 7,
         Other = 8,
-        `Two or More` = 9
+        `Two or More` = 9,
+        Latino = 10,
     ) %>%
-    mutate(county = measure[(c(0, rep(1:(nrow(.) - 1) %/% 5)) * 5) + 1]) %>%
-    filter(county != measure) %>%
     mutate(county = gsub(" County, California", "", county)) %>%
-    slice((0:58 * 4) + 1) %>%
-    select(-1) %>%
-    mutate(across(1:8, ~ as.numeric(gsub(",", "", .)))) %>%
+    mutate(across(2:10, ~ as.numeric(gsub(",", "", .)))) %>%
     mutate(AAPI = Asian + PI, .keep = "unused") %>%
     relocate(county) %>%
-    pivot_longer(2:8, names_to = "race", values_to = "total")
+    pivot_longer(2:9, names_to = "race", values_to = "total")
 
 
 estimated_homeless <-
@@ -109,5 +105,5 @@ estimated_homeless %>%
 sheet_write(
     estimated_homeless,
     "1Hbn66qNCI4ejuDiHv55n0EN2NQffbIEK8NPe1VhjJ-w",
-    sheet = "Estimated Homeless 2021"
+    sheet = "Estimated Homeless 2022"
 )
