@@ -175,3 +175,11 @@ person_weighted %>%
   summarise(MULT = survey_ratio(doubledup, (STUDENT_AGED == 1) * doubledup)) %>%
   write.csv("data/intermediate/homeless_multipliers_race_2021.csv",
             row.names = FALSE)
+
+# Check multipliers by county
+person_weighted %>%
+  filter(COUNTYFIP != 0) %>%
+  group_by(YEAR, COUNTYFIP, RACE_COMB) %>%
+  summarise(MULT = survey_ratio(doubledup, (STUDENT_AGED == 1) * doubledup)) %>%
+  write.csv("data/checks/homeless_multipliers_county_race_2021.csv",
+            row.names = FALSE)
