@@ -107,3 +107,10 @@ sheet_write(
     "1Hbn66qNCI4ejuDiHv55n0EN2NQffbIEK8NPe1VhjJ-w",
     sheet = "Estimated Homeless 2022"
 )
+
+# estimated_homeless %>%
+#     pivot_wider(names_from = race, values_from = 3:11) %>%
+#     sheet_write(
+#         "1Hbn66qNCI4ejuDiHv55n0EN2NQffbIEK8NPe1VhjJ-w",
+#         sheet = "HOUSING INSECURITY"
+#     )
